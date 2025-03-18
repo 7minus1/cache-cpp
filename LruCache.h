@@ -179,5 +179,44 @@ namespace MyCache {
     }
   };
 
+  // 优化：lru分片，提高高并发使用性能 (没有继承)
+  template<typename Key, typename Value>
+  class HashLruCaches {
+  private:
+    size_t capacity_; // 总容量
+    int sliceNum_;    // 切片数量
+    std::vector<std::unique_ptr<LruCache<Key, Value>>> lruSliceCaches_; // 切片lru缓存
 
+    // 将key转为对应Hash值
+    size_t Hash(Key key) {
+      std::hash<Key> hashFunc;
+      return hashFunc(key);
+    }
+  public:
+    HashLruCaches(size_t capacity, int sliceNum)
+      : capacity_(capacity), sliceNum_(sliceNum > 0 ? sliceNum : std::thread::hardware_concurrency()) {
+      size_t sliceSize = std::ceil(capacity / static_cast<double>(sliceNum_));  // 获取每个分片的大小
+      for (int i = 0; i < sliceNum_; ++i) {
+        lruSliceCaches_.emplace_back(new LruCache<Key, Value>(sliceSize));
+      }
+    }
+
+    void put(Key key, Value value) {
+      // 获取key的hash值，计算对应的分片索引
+      size_t sliceIndex = Hash(key) % sliceNum_;
+      return lruSliceCaches_[sliceIndex]->put(key, value);
+    }
+
+    bool get(Key key, Value& value) {
+      size_t sliceIndex = Hash(key) % sliceNum_;
+      return lruSliceCaches_[sliceIndex]->get(key, value);
+    }
+    
+    Value get(Key key) {
+      Value value{};
+      get(key, value);
+      return value;
+    }
+  };
+  
 }
