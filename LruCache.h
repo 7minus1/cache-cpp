@@ -76,7 +76,7 @@ namespace MyCache {
     }
 
     Value get(Key key) override {
-      Value value{};
+      Value value{};  // 初始化为空
       get(key, value);
       return value;
     }
@@ -140,4 +140,44 @@ namespace MyCache {
       nodeMap_[key] = newNode;
     }
   };
+  
+  // 优化：LRU-k
+  template<typename Key, typename Value>
+  class LruKCache : public LruCache<Key, Value> {
+  private:
+    int k_;   // 进入缓存队列的评判标准
+    std::unique_ptr<LruCache<Key, size_t>> historyList_;  // 访问数据历史记录(value=访问次数)
+  public:
+    LruKCache(int capacity, int historyCapacity, int k) 
+      : LruKCache<Key, Value>(capacity), historyList_(std::make_unique<LruCache<Key, size_t>>(historyCapacity)), k_(k)
+      {}
+    
+    Value get(Key key) {
+      // 获取访问次数
+      size_t historyCount = historyList_->get(key);
+      // 存在，count++
+      historyList_->put(key, ++historyCount);
+      // 读数据（不一定能获取到）
+      return LruCache<Key, Value>::get(key);
+    }
+
+    void put(Key key, Value value) {
+      // 判断是否存在缓存中
+      if (LruCache<Key, Value>::get(key) != "") {
+        LruCache<Key, Value>::put(key, value);  // 存在，直接覆盖
+      }
+
+      // 获取访问次数
+      size_t historyCount = historyList_->get(key);
+      historyList_->put(key, ++historyCount);
+
+      // 次数达到上限，添加入缓存
+      if (historyCount >= k_) {
+        historyList_->remove(key);
+        LruCache<Key, Value::put(key, value);
+      }
+    }
+  };
+
+
 }
