@@ -269,6 +269,51 @@ namespace MyCache {
 
     it->second->addNode(node);
   }
+
+  // HashLfuCache
+  template<typename Key, typename Value>
+  class HashLfuCache {
+  private:
+    size_t capacity_; // 缓存总容量
+    int sliceNum_;    // 缓存分片数量
+    std::vector<std::unique_ptr<LfuCache<Key, Value>>> lfuSliceCaches_; // 缓存lfu分片容器
+
+    // 将key计算成对应哈希值
+    size_t Hash(Key key) {
+      std::hash<Key> hashFunc;
+      return hashFunc(key);
+    }
+  public:
+    HashLfuCache(size_t capacity, int sliceNum, int maxAvgNum = 10) 
+      : capacity_(capacity), sliceNum_(sliceNum > 0 ? sliceNum : std::thread::hardware_concurrency()) {
+      size_t sliceSize = std::ceil(capacity_ / static_cast<double>(sliceNum_));   // 每个lfu分片的容量
+      for (int i = 0; i < sliceNum_; ++i) {
+        lfuSliceCaches_.emplace_back(new LfuCache<Key, Value>(sliceSize, maxAvgNum));
+      }
+    }
+
+    void put(Key key, Value value) {
+      // 根据key找到对应的lfu分片
+      size_t index = Hash(key) % sliceNum_;
+      lfuSliceCaches_[index]->put(key, value);
+    }
+
+    bool get(Key key, Value& value) {
+      size_t index = Hash(key) % sliceNum_;
+      return lfuSliceCaches_[index]->get(key, value);
+    }
+
+    Value get(Key key) {
+      Value value;
+      get(key, value);
+      return value;
+    }
+
+    // 清空缓存，回收资源
+    void purge() {
+      for (auto& lfuSliceCache : lfuSliceCaches_) {
+        lfuSliceCache->purge();
+      }  
+    }
+  };
 } // namespace MyCache
-
-
